@@ -1,0 +1,11 @@
+{
+  "name": "fleet-poc",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "install:all": "npm install --prefix services/fleet-svc && npm install --prefix services/tracking-svc && npm install --prefix services/analytics-svc && npm install --prefix services/notification-svc && npm install --prefix gateway && npm install --prefix client && npm install --prefix data-generator",
+    "test": "npm test --prefix services/fleet-svc && npm test --prefix services/tracking-svc && npm test --prefix services/analytics-svc && npm test --prefix services/notification-svc && npm test --prefix gateway",
+    "dev": "docker-compose up --build",
+    "generate-data": "npm start --prefix data-generator"
+  }
+}

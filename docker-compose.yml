@@ -1,0 +1,100 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: fleet
+      POSTGRES_PASSWORD: fleetpass
+      POSTGRES_DB: fleet
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+
+  fleet-svc:
+    build: ./services/fleet-svc
+    ports:
+      - "4001:4001"
+    environment:
+      DATABASE_URL: postgresql://fleet:fleetpass@postgres:5432/fleet
+      PORT: 4001
+    depends_on:
+      - postgres
+
+  tracking-svc:
+    build: ./services/tracking-svc
+    ports:
+      - "4002:4002"
+    environment:
+      DATABASE_URL: postgresql://fleet:fleetpass@postgres:5432/fleet
+      PORT: 4002
+    depends_on:
+      - postgres
+
+  analytics-svc:
+    build: ./services/analytics-svc
+    ports:
+      - "4003:4003"
+    environment:
+      REDIS_URL: redis://redis:6379
+      DATABASE_URL: postgresql://fleet:fleetpass@postgres:5432/fleet
+      PORT: 4003
+      FLEET_SVC_URL: http://fleet-svc:4001
+      ANALYTICS_SELF_URL: http://analytics-svc:4003
+    depends_on:
+      - postgres
+      - redis
+
+  notification-svc:
+    build: ./services/notification-svc
+    ports:
+      - "4004:4004"
+    environment:
+      REDIS_URL: redis://redis:6379
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672
+      PORT: 4004
+    depends_on:
+      - redis
+      - rabbitmq
+
+  gateway:
+    build: ./gateway
+    ports:
+      - "4000:4000"
+    environment:
+      FLEET_SVC_URL: http://fleet-svc:4001
+      TRACKING_SVC_URL: http://tracking-svc:4002
+      ANALYTICS_SVC_URL: http://analytics-svc:4003
+      NOTIFICATION_SVC_URL: http://notification-svc:4004
+      RATE_LIMIT_MAX: 200
+      RATE_LIMIT_WINDOW_MS: 60000
+      CIRCUIT_THRESHOLD: 5
+      CIRCUIT_TIMEOUT_MS: 30000
+      SIMULATED_REGION_LATENCY_MS: 0
+    depends_on:
+      - fleet-svc
+      - tracking-svc
+      - analytics-svc
+      - notification-svc
+
+  client:
+    build: ./client
+    ports:
+      - "3000:3000"
+    depends_on:
+      - gateway
+
+volumes:
+  pgdata:
