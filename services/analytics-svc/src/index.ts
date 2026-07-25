@@ -3,6 +3,8 @@ import cors from 'cors';
 import { getPool } from './db';
 import { analyticsRouter } from './routes/analytics';
 import { loadtestRouter, recordCacheAccess } from './routes/loadtest';
+import { metricsRouter } from './routes/metrics';
+import { recordRequest, startMetricsWriter } from './metrics';
 
 const app = express();
 const PORT = process.env.PORT || 4003;
@@ -10,8 +12,17 @@ const PORT = process.env.PORT || 4003;
 app.use(cors());
 app.use(express.json());
 
+app.use((req, res, next) => {
+  const start = Date.now();
+  res.on('finish', () => {
+    recordRequest(Date.now() - start);
+  });
+  next();
+});
+
 app.use('/api/analytics', analyticsRouter);
 app.use('/api/analytics/loadtest', loadtestRouter);
+app.use('/api/analytics/metrics', metricsRouter);
 
 app.get('/health', (_req, res) => {
   res.json({ status: 'ok', service: 'analytics-svc' });
@@ -34,9 +45,19 @@ if (process.env.NODE_ENV !== 'test') {
         await new Promise(r => setTimeout(r, 2000));
       }
     }
-    app.listen(PORT, () => {
+    startMetricsWriter();
+    const server = app.listen(PORT, () => {
       console.log(`analytics-svc running on port ${PORT}`);
     });
+
+    const shutdown = async () => {
+      console.log('Shutting down analytics-svc...');
+      server.close();
+      await getPool().end();
+      process.exit(0);
+    };
+    process.on('SIGTERM', shutdown);
+    process.on('SIGINT', shutdown);
   })();
 }
 

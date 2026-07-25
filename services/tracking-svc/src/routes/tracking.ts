@@ -2,6 +2,22 @@ import { Router, Request, Response } from 'express';
 import { v4 as uuidv4 } from 'uuid';
 import { getPool } from '../db';
 import { gpsReadingSchema, gpsBatchSchema, trackingQuerySchema } from '../validators';
+import Redis from 'ioredis';
+
+const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
+let redis: Redis | null = null;
+try {
+  redis = new Redis(redisUrl, { maxRetriesPerRequest: 1, enableOfflineQueue: false, lazyConnect: true });
+  redis.connect().catch(() => { redis = null; });
+} catch { redis = null; }
+
+async function incrementGpsCount(count: number): Promise<void> {
+  if (!redis) return;
+  try {
+    await redis.incrby('metrics:gps_count', count);
+    await redis.expire('metrics:gps_count', 120);
+  } catch {}
+}
 
 export const trackingRouter = Router();
 
@@ -17,6 +33,7 @@ trackingRouter.post('/ingest', async (req: Request, res: Response) => {
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING *`,
     [id, vehicle_id, lat, lng, speed ?? null, heading ?? null, fuel_level ?? null, engine_temp ?? null, odometer ?? null, recorded_at ?? new Date().toISOString()]
   );
+  incrementGpsCount(1);
   res.status(201).json({ success: true, data: result.rows[0] });
 });
 
@@ -38,6 +55,7 @@ trackingRouter.post('/ingest/batch', async (req: Request, res: Response) => {
       );
     }
     await client.query('COMMIT');
+    incrementGpsCount(readings.length);
     res.status(201).json({ success: true, data: { ingested: readings.length } });
   } catch (err) {
     await client.query('ROLLBACK');

@@ -2,7 +2,8 @@ import React, { useState, useRef, useEffect } from 'react';
 import { api } from '../services/api';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, LineChart, Line, Legend, PieChart, Pie, Cell } from 'recharts';
 
-const API = 'http://localhost:4000/api';
+import { API_BASE } from '../services/api';
+const API = API_BASE;
 const REGIONS = [
   { label: 'us-east (N. Virginia)', value: 0 },
   { label: 'us-west (Oregon)', value: 40 },

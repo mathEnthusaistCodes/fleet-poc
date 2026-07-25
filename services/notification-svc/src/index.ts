@@ -30,7 +30,31 @@ const clients = new Set<WebSocket>();
 wss.on('connection', (ws: WebSocket) => {
   clients.add(ws);
   ws.on('close', () => clients.delete(ws));
+  publishMetrics();
 });
+
+async function publishMetrics(): Promise<void> {
+  try {
+    await redis.set('metrics:ws_connections', String(clients.size), 'EX', 10);
+  } catch {}
+}
+
+setInterval(async () => {
+  try {
+    const alerts = await redis.lrange('alerts:history', 0, 999);
+    const counts = { critical: 0, warning: 0, info: 0 };
+    for (const a of alerts) {
+      try {
+        const parsed = JSON.parse(a);
+        if (parsed.severity === 'critical') counts.critical++;
+        else if (parsed.severity === 'warning') counts.warning++;
+        else counts.info++;
+      } catch {}
+    }
+    await redis.set('metrics:alert_counts', JSON.stringify(counts), 'EX', 10);
+    await redis.set('metrics:ws_connections', String(clients.size), 'EX', 10);
+  } catch {}
+}, 5000);
 
 async function broadcastAlert(alert: Alert): Promise<void> {
   const payload = JSON.stringify({ type: 'alert', data: alert });
@@ -76,6 +100,16 @@ if (process.env.NODE_ENV !== 'test') {
   server.listen(PORT, () => {
     console.log(`notification-svc running on port ${PORT}`);
   });
+
+  const shutdown = async () => {
+    console.log('Shutting down notification-svc...');
+    server.close();
+    wss.close();
+    redis.disconnect();
+    process.exit(0);
+  };
+  process.on('SIGTERM', shutdown);
+  process.on('SIGINT', shutdown);
 }
 
 export { app, server, wss };

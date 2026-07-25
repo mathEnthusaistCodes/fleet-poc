@@ -1,6 +1,6 @@
 import express from 'express';
 import cors from 'cors';
-import { initDb } from './db';
+import { initDb, getPool } from './db';
 import { trackingRouter } from './routes/tracking';
 
 const app = express();
@@ -29,6 +29,14 @@ if (process.env.NODE_ENV !== 'test') {
     app.listen(PORT, () => {
       console.log(`tracking-svc running on port ${PORT}`);
     });
+
+    const shutdown = async () => {
+      console.log('Shutting down tracking-svc...');
+      await getPool().end();
+      process.exit(0);
+    };
+    process.on('SIGTERM', shutdown);
+    process.on('SIGINT', shutdown);
   })();
 }
 

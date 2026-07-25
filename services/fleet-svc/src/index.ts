@@ -1,6 +1,6 @@
 import express from 'express';
 import cors from 'cors';
-import { initDb } from './db';
+import { initDb, getPool } from './db';
 import { vehicleRouter } from './routes/vehicles';
 import { driverRouter } from './routes/drivers';
 import { routeRouter } from './routes/routes';
@@ -33,6 +33,14 @@ if (process.env.NODE_ENV !== 'test') {
     app.listen(PORT, () => {
       console.log(`fleet-svc running on port ${PORT}`);
     });
+
+    const shutdown = async () => {
+      console.log('Shutting down fleet-svc...');
+      await getPool().end();
+      process.exit(0);
+    };
+    process.on('SIGTERM', shutdown);
+    process.on('SIGINT', shutdown);
   })();
 }
 

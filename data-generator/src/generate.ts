@@ -1,9 +1,23 @@
 import { Pool } from 'pg';
 import { v4 as uuidv4 } from 'uuid';
+import http from 'http';
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL || 'postgresql://fleet:fleetpass@localhost:5432/fleet',
 });
+
+const TRACKING_SVC_URL = process.env.TRACKING_SVC_URL || 'http://localhost:4002';
+const NOTIFICATION_SVC_URL = process.env.NOTIFICATION_SVC_URL || 'http://localhost:4004';
+
+const ALERT_TYPES = ['geofence', 'speed', 'maintenance', 'fuel', 'engine'] as const;
+const ALERT_SEVERITIES = ['info', 'warning', 'critical'] as const;
+const ALERT_MESSAGES: Record<string, string[]> = {
+  speed: ['Vehicle exceeded speed limit', 'Rapid acceleration detected', 'Hard braking event'],
+  geofence: ['Vehicle left designated zone', 'Geofence boundary crossed', 'Unauthorized area entry'],
+  maintenance: ['Oil change overdue', 'Tire pressure low', 'Engine temperature high', 'Brake inspection needed'],
+  fuel: ['Fuel level below 15%', 'Fuel consumption above average', 'Refueling detected'],
+  engine: ['Engine temperature warning', 'Check engine light triggered', 'Battery voltage low'],
+};
 
 const MAKES = ['Ford', 'Chevrolet', 'Toyota', 'Mercedes-Benz', 'Volvo', 'Freightliner', 'Kenworth', 'Peterbilt'];
 const MODELS: Record<string, string[]> = {
@@ -46,6 +60,81 @@ function randomBetween(min: number, max: number): number {
 
 function pick<T>(arr: readonly T[]): T {
   return arr[Math.floor(Math.random() * arr.length)];
+}
+
+function postJSON(url: string, data: any): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const body = JSON.stringify(data);
+    const parsed = new URL(url);
+    const req = http.request({
+      hostname: parsed.hostname,
+      port: parsed.port,
+      path: parsed.pathname,
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) },
+    }, (res) => {
+      res.resume();
+      res.on('end', () => resolve());
+    });
+    req.on('error', () => resolve());
+    req.write(body);
+    req.end();
+  });
+}
+
+async function startLiveData(vehicleIds: string[]): Promise<void> {
+  console.log('\n🔴 Starting live GPS data stream through tracking-svc...');
+  console.log('   Vehicles sending data:', vehicleIds.length);
+  console.log('   Press Ctrl+C to stop\n');
+
+  const BASE_LAT = 39.8283;
+  const BASE_LNG = -98.5795;
+
+  let alertCounter = 0;
+
+  const sendAlert = async () => {
+    const type = ALERT_TYPES[Math.floor(Math.random() * ALERT_TYPES.length)];
+    const messages = ALERT_MESSAGES[type];
+    const vehicleId = vehicleIds[Math.floor(Math.random() * vehicleIds.length)];
+    await postJSON(`${NOTIFICATION_SVC_URL}/api/alerts`, {
+      type,
+      vehicle_id: vehicleId,
+      message: messages[Math.floor(Math.random() * messages.length)],
+      severity: ALERT_SEVERITIES[Math.floor(Math.random() * ALERT_SEVERITIES.length)],
+    });
+    alertCounter++;
+  };
+
+  await sendAlert();
+
+  while (true) {
+    const batchSize = Math.floor(Math.random() * 20) + 10;
+    const readings = [];
+
+    for (let i = 0; i < batchSize; i++) {
+      const vehicleId = vehicleIds[Math.floor(Math.random() * vehicleIds.length)];
+      readings.push({
+        vehicle_id: vehicleId,
+        lat: BASE_LAT + (Math.random() - 0.5) * 10,
+        lng: BASE_LNG + (Math.random() - 0.5) * 20,
+        speed: Math.round(Math.random() * 60 + 20),
+        heading: Math.round(Math.random() * 360),
+        fuel_level: Math.round(Math.random() * 80 + 15),
+        engine_temp: Math.round(Math.random() * 30 + 75),
+        odometer: Math.round(50000 + Math.random() * 50000),
+      });
+    }
+
+    await postJSON(`${TRACKING_SVC_URL}/api/tracking/ingest/batch`, { readings });
+
+    if (Math.random() < 0.3) {
+      await sendAlert();
+    }
+
+    process.stdout.write(`   📡 Sent ${batchSize} GPS readings | ${alertCounter} alerts\r`);
+
+    await new Promise(r => setTimeout(r, 2000));
+  }
 }
 
 async function generate() {
@@ -176,6 +265,10 @@ async function generate() {
     console.log(`   Drivers: 30`);
     console.log(`   Routes: 200`);
     console.log(`   GPS Readings: ${readingCount}`);
+
+    if (process.argv.includes('--live')) {
+      await startLiveData(vehicleIds);
+    }
   } catch (err) {
     console.error('Error generating data:', err);
   } finally {

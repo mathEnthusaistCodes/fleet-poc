@@ -205,9 +205,17 @@ app.use('/api/:service', rateLimiter, (req, res) => {
 });
 
 if (process.env.NODE_ENV !== 'test') {
-  app.listen(PORT, () => {
+  const server = app.listen(PORT, () => {
     console.log(`gateway running on port ${PORT}`);
   });
+
+  const shutdown = () => {
+    console.log('Shutting down gateway...');
+    server.close();
+    process.exit(0);
+  };
+  process.on('SIGTERM', shutdown);
+  process.on('SIGINT', shutdown);
 }
 
 export default app;
