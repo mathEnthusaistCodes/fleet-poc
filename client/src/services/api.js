@@ -1,4 +1,4 @@
-export const API_BASE = window.REACT_APP_API_URL || 'http://localhost:4000/api';
+export const API_BASE = window.REACT_APP_API_URL || '/api';
 
 export class ApiError extends Error {
   constructor(status, message) {

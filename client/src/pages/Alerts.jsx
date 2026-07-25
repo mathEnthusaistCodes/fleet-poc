@@ -15,7 +15,8 @@ export default function Alerts() {
 
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const wsPort = process.env.NODE_ENV === 'production' ? window.location.port : '4004';
-    const wsUrl = `${protocol}//${window.location.hostname}:${wsPort}/ws/alerts`;
+    const wsHost = wsPort ? `${window.location.hostname}:${wsPort}` : window.location.hostname;
+    const wsUrl = `${protocol}//${wsHost}/ws/alerts`;
     wsRef.current = new WebSocket(wsUrl);
 
     wsRef.current.onmessage = (event) => {
