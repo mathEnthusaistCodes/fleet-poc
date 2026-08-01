@@ -1,8 +1,8 @@
 FROM node:20-alpine
 WORKDIR /app
 COPY package*.json tsconfig.json ./
-RUN npm ci
+RUN NODE_OPTIONS="--max-old-space-size=512" npm ci
 COPY src/ ./src
-RUN npx tsc
+RUN NODE_OPTIONS="--max-old-space-size=512" npx tsc
 EXPOSE 4003
 CMD ["node", "dist/index.js"]
