@@ -46,6 +46,7 @@ services:
       - redis
 
   analytics-svc:
+    restart: always
     build: ./services/analytics-svc
     ports:
       - "4003:4003"
@@ -53,6 +54,7 @@ services:
       REDIS_URL: redis://redis:6379
       DATABASE_URL: postgresql://fleet:fleetpass@postgres:5432/fleet
       PORT: 4003
+      NODE_OPTIONS: "--max-old-space-size=1024"
       FLEET_SVC_URL: http://fleet-svc:4001
       ANALYTICS_SELF_URL: http://analytics-svc:4003
     depends_on:
